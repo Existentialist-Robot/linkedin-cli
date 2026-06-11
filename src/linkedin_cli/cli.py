@@ -122,6 +122,12 @@ def _human_profile(result: dict) -> str:
     return "\n".join(lines)
 
 
+def _human_contact_info(result: dict) -> str:
+    lines = [f"email: {result.get('email') or '—'}"]
+    lines += [f"phone: {p}" for p in (result.get("phone_numbers") or [])]
+    return "\n".join(lines)
+
+
 def _human_thread(result: dict) -> str:
     messages = result.get("messages")
     if not messages:
@@ -151,6 +157,7 @@ _HUMAN = {
     "connect": _human_state,
     "message": _human_sent,
     "profile": _human_profile,
+    "contact-info": _human_contact_info,
     "thread": _human_thread,
     "search": _human_search,
     "session-close": _human_closed,
@@ -210,6 +217,17 @@ def _verb_profile(session, args) -> dict:
     return out
 
 
+def _verb_contact_info(session, args) -> dict:
+    from linkedin_cli.actions.contact_info import get_contact_info
+
+    profile = _handle_to_profile(args.handle)
+    contact, raw = get_contact_info(session, profile)
+    out = {"public_identifier": profile["public_identifier"], **contact}
+    if args.raw:
+        out["_raw"] = raw
+    return out
+
+
 def _verb_status(session, args) -> dict:
     from linkedin_cli.actions.status import get_connection_status
 
@@ -256,6 +274,7 @@ _VERBS = {
     "login": _verb_login,
     "whoami": _verb_whoami,
     "profile": _verb_profile,
+    "contact-info": _verb_contact_info,
     "status": _verb_status,
     "connect": _verb_connect,
     "message": _verb_message,
@@ -350,6 +369,11 @@ def build_parser() -> argparse.ArgumentParser:
                                help="Scrape a member's full profile: headline, positions, education, location")
     p_profile.add_argument("handle", help=handle_help)
     p_profile.add_argument("--raw", action="store_true", help="Also emit the untouched Voyager blob under _raw")
+
+    p_contact = sub.add_parser("contact-info", parents=[common],
+                               help="Fetch the member's contact info (email, phone) from the Contact info overlay")
+    p_contact.add_argument("handle", help=handle_help)
+    p_contact.add_argument("--raw", action="store_true", help="Also emit the untouched RSC payload under _raw")
 
     sub.add_parser("status", parents=[common],
                    help="Report the connection state with the member: Connected, Pending, or Qualified"

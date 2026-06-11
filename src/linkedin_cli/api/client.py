@@ -7,6 +7,7 @@ from urllib.parse import urlencode
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 from linkedin_cli.api.voyager import parse_linkedin_voyager_response, parse_connection_degree
+from linkedin_cli.api.sdui import parse_contact_info
 from linkedin_cli.url_utils import url_to_public_id
 from linkedin_cli.exceptions import (
     AuthenticationError,
@@ -180,3 +181,51 @@ class PlaywrightLinkedinAPI:
         self._check_profile_response(res, public_identifier)
 
         return parse_connection_degree(res.json())
+
+    # Server-driven-UI screen that renders the profile "Contact info" overlay.
+    SDUI_CONTACT_SCREEN = (
+        "com.linkedin.sdui.flagshipnav.profile.ProfileContactDetailsOverlay"
+    )
+
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=2, min=2, max=30),
+        retry=retry_if_exception_type(IOError),
+        reraise=True,
+    )
+    def get_contact_info(self, public_identifier: str) -> tuple[dict, str]:
+        """Fetch a member's contact details (email, phone) from the overlay.
+
+        Forges the same server-driven-UI POST the web app fires when you open
+        a profile's "Contact info" overlay, and parses the RSC stream it
+        returns. Returns ``(parsed_dict, raw_text)``; only fields the member
+        exposes to your network appear — email is typically present only for
+        1st-degree connections.
+        """
+        screen = self.SDUI_CONTACT_SCREEN
+        url = (
+            "https://www.linkedin.com/flagship-web/rsc-action/actions/navigation"
+            f"?screenId={screen}&sduiid={screen}"
+        )
+        payload = json.dumps({
+            "clientArguments": {
+                "$type": "proto.sdui.actions.requests.RequestedArguments",
+                "payload": {"vanityName": public_identifier, "isVanityNameResolved": True},
+                "requestedStateKeys": [],
+                "requestMetadata": {"$type": "proto.sdui.common.RequestMetadata"},
+                "states": [],
+                "screenId": screen,
+            },
+            "isModal": True,
+        })
+
+        res = self.post(
+            url,
+            headers={"content-type": "application/json",
+                     "x-li-rsc-stream": "true", "accept": "*/*"},
+            data=payload,
+        )
+        self._check_profile_response(res, public_identifier)
+
+        text = res.text()
+        return parse_contact_info(text), text

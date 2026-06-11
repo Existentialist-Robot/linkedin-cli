@@ -26,7 +26,7 @@ it behaves like a human session instead of a cookie-only scraper.
   not a brittle one-shot form fill.
 - **Language-agnostic.** Anything that can run a subprocess and parse JSON can
   drive LinkedIn — Python, Node, Go, shell, or an AI agent. No SDK lock-in.
-- **Tiny surface.** Eight verbs, four dependencies, zero web framework. It knows
+- **Tiny surface.** Nine verbs, four dependencies, zero web framework. It knows
   about *a LinkedIn page and a browser* — nothing else.
 
 ## 📦 Install
@@ -59,6 +59,7 @@ linkedin-cli login                                    # authenticate the session
 linkedin-cli search "head of growth" --network first  # discover → handles
 linkedin-cli profile alice-smith                      # scrape a profile
 linkedin-cli profile alice-smith --json > alice.json  # save the full record
+linkedin-cli contact-info alice-smith                 # email / phone (if exposed)
 linkedin-cli status  alice-smith                      # Connected / Pending / Qualified
 linkedin-cli connect alice-smith                      # send a connection request
 linkedin-cli message alice-smith --text "Hi Alice 👋"
@@ -80,6 +81,7 @@ so you can clear it by hand, then carry on.
 | `whoami` | Who is this session logged in as (no login flow) | `{self}` |
 | `search <kw> [--network first/second/third] [--page N]` | People search → matching profile handles | `{query, page, network, profiles[]}` |
 | `profile <id>` | Scrape a profile (positions, education, location, …); `--raw` adds the raw Voyager blob | full `LinkedInProfile` |
+| `contact-info <id>` | Email / phone from the "Contact info" overlay (only what the member exposes — usually 1st-degree); `--raw` adds the raw RSC payload | `{public_identifier, email, emails[], phone_numbers[]}` |
 | `status <id>` | Connection state | `{public_identifier, state}` |
 | `connect <id>` | Send a connection request (no note) | `{public_identifier, state}` |
 | `message <id> --text …` | Send a direct message | `{public_identifier, sent}` |
@@ -135,7 +137,10 @@ The discovery → outreach loop an agent runs: **`search` → `profile` / `statu
   database**. One session = one LinkedIn account.
 - **Voyager API** — reads (`profile`, `thread`, `status`) call LinkedIn's private
   Voyager endpoints from inside the authenticated page (`fetch`), then parse the
-  JSON — fast and structured, no DOM scraping where an API exists.
+  JSON — fast and structured, no DOM scraping where an API exists. `contact-info`
+  forges the same server-driven-UI (RSC) POST the web app fires for the "Contact
+  info" overlay and parses the returned stream — same fetch-from-page technique,
+  different endpoint.
 - **Page-state auth machine** — `classify_page()` judges the live page by URL
   *path* only (so a `/login?...redirect=/feed/` URL never reads as the feed), and
   each transition asserts its pre/post state, raising on an illegal jump. Login,
