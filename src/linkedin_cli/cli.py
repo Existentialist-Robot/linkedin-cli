@@ -33,6 +33,7 @@ import logging
 import os
 import signal
 import sys
+from pathlib import Path
 
 from linkedin_cli.enums import ProfileState
 from linkedin_cli.exceptions import (
@@ -294,11 +295,19 @@ def _cmd_session_open(args) -> int:
 
 
 def _cmd_session_close(args) -> int:
+    from linkedin_cli.session import clear_session
+
     record = read_session(args.name)
     if not record:
         _err(f"error: usage: no open session named {args.name!r}")
         return 2
-    os.kill(record["pid"], signal.SIGTERM)
+    try:
+        os.kill(record["pid"], signal.SIGTERM)
+    except OSError:
+        pass  # launcher already gone — fall through and clear the stale entry
+    # On Windows os.kill force-terminates without running the launcher's own
+    # cleanup, so clear the registry entry here to avoid a stale session record.
+    clear_session(args.name)
     _render("session-close", {"name": args.name, "closed": True}, args.json)
     return 0
 
@@ -405,7 +414,34 @@ def _configure_logging() -> None:
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 
+def _load_dotenv() -> None:
+    """Populate ``os.environ`` from a ``.env`` file (cwd or any parent), if present.
+
+    Zero-dependency and non-destructive: a variable already exported in the real
+    environment always wins (``setdefault``), so ``.env`` is a convenience default,
+    never an override. Parses ``KEY=value`` lines; ``#`` comment and blank lines and
+    an optional ``export`` prefix are ignored, and surrounding quotes are stripped.
+    """
+    cwd = Path.cwd()
+    for directory in (cwd, *cwd.parents):
+        env_file = directory / ".env"
+        if env_file.is_file():
+            break
+    else:
+        return
+    for raw in env_file.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        line = line.removeprefix("export ").strip()
+        key, sep, value = line.partition("=")
+        if not sep:
+            continue
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
 def main(argv=None) -> int:
+    _load_dotenv()
     args = build_parser().parse_args(argv)
     _configure_logging()
 

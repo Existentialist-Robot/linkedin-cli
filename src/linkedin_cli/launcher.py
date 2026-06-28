@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import threading
 
 from playwright.sync_api import sync_playwright
 from playwright_stealth import Stealth
@@ -50,8 +51,20 @@ def open_bound_session(name: str, *, profile_dir: str,
         logger.info("Session %r bound at %s (profile=%s)", name, endpoint, profile_dir)
         print(endpoint, flush=True)
 
+        # Block until a termination signal. ``signal.pause()`` is Unix-only, so we
+        # wait on an Event the handlers set — portable to Windows, where SIGINT
+        # (Ctrl-C) is still delivered to the handler. (A ``session close`` on
+        # Windows force-terminates via TerminateProcess, bypassing this cleanup;
+        # the close command clears the registry entry itself for that case.)
+        stop = threading.Event()
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            try:
+                signal.signal(sig, lambda *_: stop.set())
+            except (ValueError, OSError):
+                pass  # unsupported signal or not on the main thread
         try:
-            signal.pause()  # block until a termination signal
+            while not stop.wait(1.0):
+                pass
         except (KeyboardInterrupt, SystemExit):
             pass
         finally:
