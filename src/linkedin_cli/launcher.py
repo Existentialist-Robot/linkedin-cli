@@ -51,11 +51,15 @@ def open_bound_session(name: str, *, profile_dir: str,
         logger.info("Session %r bound at %s (profile=%s)", name, endpoint, profile_dir)
         print(endpoint, flush=True)
 
-        # Block until a termination signal. ``signal.pause()`` is Unix-only, so we
-        # wait on an Event the handlers set — portable to Windows, where SIGINT
-        # (Ctrl-C) is still delivered to the handler. (A ``session close`` on
-        # Windows force-terminates via TerminateProcess, bypassing this cleanup;
-        # the close command clears the registry entry itself for that case.)
+        # Stay alive until a termination signal. Two constraints shape this loop:
+        #   1. ``signal.pause()`` is Unix-only, so we watch a flag the handlers set
+        #      (SIGINT/Ctrl-C is still delivered on Windows; ``session close`` there
+        #      force-terminates via TerminateProcess and clears the registry itself).
+        #   2. On Windows the bound ws endpoint is serviced by THIS process's
+        #      Playwright event loop. Dead-blocking the main thread (signal.pause or
+        #      Event.wait) starves that loop, so a verb's ``chromium.connect()`` hangs
+        #      forever at the ws handshake. Pumping the loop with ``wait_for_timeout``
+        #      keeps it servicing client connections.
         stop = threading.Event()
         for sig in (signal.SIGINT, signal.SIGTERM):
             try:
@@ -63,10 +67,12 @@ def open_bound_session(name: str, *, profile_dir: str,
             except (ValueError, OSError):
                 pass  # unsupported signal or not on the main thread
         try:
-            while not stop.wait(1.0):
-                pass
+            while not stop.is_set():
+                page.wait_for_timeout(1000)  # pumps the Playwright loop
         except (KeyboardInterrupt, SystemExit):
             pass
+        except Exception as exc:  # browser/page closed out from under us → shut down
+            logger.info("Session %r ending: %s", name, exc)
         finally:
             clear_session(name)
             context.close()
