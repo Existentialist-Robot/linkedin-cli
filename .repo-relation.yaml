@@ -19,8 +19,8 @@ tooling:
 
 startup:
   tier0: [.repo-relation.yaml]
-  tier1: README.md
-  tier2_on_demand: [llms.txt]
+  tier1: AGENTS.md
+  tier2_on_demand: [README.md, llms.txt]
 
 # Architecture record (an inactive, declarative profile; nothing here is enforced or run).
 architecture:
