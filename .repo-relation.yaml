@@ -33,3 +33,10 @@ architecture:
         is its agent-facing summary
       revision: 9ad649e81ae1a0230f46111f1765a7bef7f26d6e
       blob: 6258c7ff5b90eb2c83d71baa768e9cf1e31cefd0
+  # R7, assessment rank 3: applicability and enforcement profile, inactive by default.
+  # Nothing declared here refuses a commit, runs on a schedule, or arms.
+  profile:
+    applies: [R2-applicability-graph, R6-crosswalk, R7-policy-gates, R9-review-boundary]
+    enforcement: inactive
+    cadence: none
+    arming: none
