@@ -19,5 +19,24 @@ tooling:
 
 startup:
   tier0: [.repo-relation.yaml]
-  tier1: README.md
-  tier2_on_demand: [llms.txt]
+  tier1: AGENTS.md
+  tier2_on_demand: [README.md, llms.txt]
+
+# Architecture record (an inactive, declarative profile; nothing here is enforced or run).
+architecture:
+  # R6, assessment rank 1: one revision-pinned surface -> role/mechanism crosswalk row.
+  # `blob` is the surface's git blob at `revision`, so a later edit to it reads as drift.
+  crosswalk:
+    - surface: README.md
+      role: routing-layout
+      mechanism: README.md is the orientation page for the verbs and the bound-session model; llms.txt
+        is its agent-facing summary
+      revision: 9ad649e81ae1a0230f46111f1765a7bef7f26d6e
+      blob: 6258c7ff5b90eb2c83d71baa768e9cf1e31cefd0
+  # R7, assessment rank 3: applicability and enforcement profile, inactive by default.
+  # Nothing declared here refuses a commit, runs on a schedule, or arms.
+  profile:
+    applies: [R2-applicability-graph, R6-crosswalk, R7-policy-gates, R9-review-boundary]
+    enforcement: inactive
+    cadence: none
+    arming: none
